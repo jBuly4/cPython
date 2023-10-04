@@ -1,0 +1,109 @@
+From: jbuly4 <jbuly4@jbuly4.jbuly4>
+Subject: [PATCH] new_opcode
+---
+Index: Python/peephole.c
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/Python/peephole.c b/Python/peephole.c
+--- a/Python/peephole.c	(revision 0f56adb8d74e703974811620559d96c999334547)
++++ b/Python/peephole.c	(date 1695327197983)
+@@ -301,6 +301,17 @@
+                 /* Skip over LOAD_CONST trueconst
+                    POP_JUMP_IF_FALSE xx.  This improves
+                    "while 1" performance.  */
++            case LOAD_FAST:
++                if (_Py_OPARG(codestr[i]) == 0 && nextop == LOAD_CONST) {
++                    /* замена LOAD_FAST на NOP */
++                    codestr[i] = PACKOPARG(NOP, 0);
++                    /* замена LOAD_CONST на LOAD_OTUS */
++                    codestr[nexti] = PACKOPARG(LOAD_OTUS, _Py_OPARG(codestr[nexti]));
++                    /* сдвигаем на следующий opcode после изменений */
++                    i = nexti;
++                }
++                break;
++
+             case LOAD_CONST:
+                 cumlc = lastlc + 1;
+                 if (nextop != POP_JUMP_IF_FALSE  ||
+Index: Python/ceval.c
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/Python/ceval.c b/Python/ceval.c
+--- a/Python/ceval.c	(revision 0f56adb8d74e703974811620559d96c999334547)
++++ b/Python/ceval.c	(date 1695327936875)
+@@ -1092,6 +1092,23 @@
+             FAST_DISPATCH();
+         }
+ 
++        TARGET(LOAD_OTUS) {
++            PyObject *value = GETLOCAL(0);
++            if (value == NULL) {
++                format_exc_check_arg(PyExc_UnboundLocalError,
++                                     UNBOUNDLOCAL_ERROR_MSG,
++                                     PyTuple_GetItem(co->co_varnames, 0));
++                printf("Error in target");
++                goto error;
++           }
++           Py_INCREF(value);
++           PUSH(value);
++           value = GETITEM(consts, oparg);
++           Py_INCREF(value);
++           PUSH(value);
++           FAST_DISPATCH();
++        }
++
+         PREDICTED(STORE_FAST);
+         TARGET(STORE_FAST) {
+             PyObject *value = POP();
+Index: Python/opcode_targets.h
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/Python/opcode_targets.h b/Python/opcode_targets.h
+--- a/Python/opcode_targets.h	(revision 0f56adb8d74e703974811620559d96c999334547)
++++ b/Python/opcode_targets.h	(date 1695328053196)
+@@ -161,7 +161,7 @@
+     &&_unknown_opcode,
+     &&TARGET_LOAD_METHOD,
+     &&TARGET_CALL_METHOD,
+-    &&_unknown_opcode,
++    &&TARGET_LOAD_OTUS,
+     &&_unknown_opcode,
+     &&_unknown_opcode,
+     &&_unknown_opcode,
+Index: Lib/opcode.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/Lib/opcode.py b/Lib/opcode.py
+--- a/Lib/opcode.py	(revision 0f56adb8d74e703974811620559d96c999334547)
++++ b/Lib/opcode.py	(date 1695326241832)
+@@ -213,5 +213,6 @@
+ 
+ name_op('LOAD_METHOD', 160)
+ def_op('CALL_METHOD', 161)
++def_op('LOAD_OTUS', 162)
+ 
+ del def_op, name_op, jrel_op, jabs_op
+Index: Include/opcode.h
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/Include/opcode.h b/Include/opcode.h
+--- a/Include/opcode.h	(revision 0f56adb8d74e703974811620559d96c999334547)
++++ b/Include/opcode.h	(date 1695325934639)
+@@ -127,6 +127,7 @@
+ #define BUILD_TUPLE_UNPACK_WITH_CALL 158
+ #define LOAD_METHOD             160
+ #define CALL_METHOD             161
++#define LOAD_OTUS               162
+ 
+ /* EXCEPT_HANDLER is a special, implicit block type which is created when
+    entering an except handler. It is not an opcode but we define it here
